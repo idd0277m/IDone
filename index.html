@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mis Tareas Repetitivas ✅</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
+  <header class="w-full max-w-xl text-center mb-6">
+    <h1 class="text-3xl font-bold mb-2">📋 Mis Tareas Diarias</h1>
+    <p class="text-gray-600">Define hasta 4 tareas y registra tu progreso</p>
+  </header>
+
+  <!-- Formulario de definición de tareas -->
+  <section id="setup" class="w-full max-w-xl bg-white rounded-2xl shadow p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4">🛠️ Configura tus tareas</h2>
+    <form id="task-setup-form" class="space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <input type="text" name="taskName" placeholder="Nombre tarea 1" class="border rounded p-2 w-full" />
+        <input type="text" name="taskName" placeholder="Nombre tarea 2" class="border rounded p-2 w-full" />
+        <input type="text" name="taskName" placeholder="Nombre tarea 3" class="border rounded p-2 w-full" />
+        <input type="text" name="taskName" placeholder="Nombre tarea 4" class="border rounded p-2 w-full" />
+      </div>
+      <button type="submit" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-xl">Guardar tareas</button>
+    </form>
+  </section>
+
+  <!-- Panel de tareas -->
+  <section id="tasksPanel" class="w-full max-w-xl hidden">
+    <div class="flex justify-between items-center mb-4 space-x-2">
+      <h2 class="text-xl font-semibold">🚀 Tus Tareas</h2>
+      <div class="flex space-x-2">
+        <button id="addTaskBtn" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded-xl">➕ Añadir tarea</button>
+        <button id="deleteTaskBtn" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded-xl">🗑️ Eliminar tarea</button>
+        <button id="exportBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-1 px-3 rounded-xl">📤 Exportar historial</button>
+      </div>
+    </div>
+    <div id="tasksContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6"></div>
+
+    <!-- Historial -->
+    <h2 class="text-lg font-semibold mb-2">📅 Historial (últimas 15 entradas)</h2>
+    <div id="history" class="space-y-4"></div>
+  </section>
+
+  <!-- Modal para subir foto -->
+  <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-2xl shadow-lg p-6 w-11/12 max-w-md">
+      <h3 id="modalTaskName" class="text-lg font-semibold mb-4"></h3>
+      <input type="file" id="photoInput" accept="image/*" class="mb-4" />
+      <div class="flex justify-end">
+        <button id="cancelBtn" class="mr-2 text-gray-600">Cancelar</button>
+        <button id="confirmBtn" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded-xl">📸 Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para selección de tareas (Eliminar/Exportar) -->
+  <div id="selectModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-2xl shadow-lg p-6 w-11/12 max-w-md">
+      <h3 id="selectModalTitle" class="text-lg font-semibold mb-4"></h3>
+      <div id="selectList" class="max-h-60 overflow-y-auto mb-4"></div>
+      <div class="flex justify-end">
+        <button id="selectCancelBtn" class="mr-2 text-gray-600">Cancelar</button>
+        <button id="selectConfirmBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded-xl">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // DOM refs
+    const setupSection = document.getElementById('setup');
+    const tasksPanel = document.getElementById('tasksPanel');
+    const form = document.getElementById('task-setup-form');
+    const tasksContainer = document.getElementById('tasksContainer');
+    const historyDiv = document.getElementById('history');
+    const addTaskBtn = document.getElementById('addTaskBtn');
+    const deleteTaskBtn = document.getElementById('deleteTaskBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const modal = document.getElementById('modal');
+    const modalTaskName = document.getElementById('modalTaskName');
+    const photoInput = document.getElementById('photoInput');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const confirmBtn = document.getElementById('confirmBtn');
+    const selectModal = document.getElementById('selectModal');
+    const selectModalTitle = document.getElementById('selectModalTitle');
+    const selectList = document.getElementById('selectList');
+    const selectCancelBtn = document.getElementById('selectCancelBtn');
+    const selectConfirmBtn = document.getElementById('selectConfirmBtn');
+
+    let tasks = [];
+    let currentTaskIndex = null;
+    let selectAction = null; // 'delete' or 'export'
+
+    // Initialize
+    function loadData() {
+      tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+      if (tasks.length) {
+        setupSection.classList.add('hidden');
+        tasksPanel.classList.remove('hidden');
+      }
+      renderTasks();
+      renderHistory();
+    }
+
+    // Save tasks to storage
+    function saveTasks() {
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+    }
+
+    // Setup initial tasks
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const names = Array.from(form.querySelectorAll('input[name="taskName"]'))
+        .map(i => i.value.trim())
+        .filter(v => v)
+        .slice(0,4);
+      if (!names.length) return;
+      tasks = names.map(name => ({ name, records: [] }));
+      saveTasks(); loadData();
+    });
+
+    // Add new task
+    addTaskBtn.addEventListener('click', () => {
+      if (tasks.length >= 4) return alert('Máximo 4 tareas.');
+      const name = prompt('Nombre de la nueva tarea:').trim();
+      if (name) { tasks.push({ name, records: [] }); saveTasks(); loadData(); }
+    });
+
+    // Delete tasks
+    deleteTaskBtn.addEventListener('click', () => openSelect('delete', 'Eliminar tarea(s)'));
+    // Export history
+    exportBtn.addEventListener('click', () => openSelect('export', 'Exportar historial'));
+
+    // Open selection modal
+    function openSelect(action, title) {
+      selectAction = action;
+      selectModalTitle.textContent = title;
+      selectList.innerHTML = '';
+      tasks.forEach((t, i) => {
+        const id = `chk-${i}`;
+        const div = document.createElement('div');
+        div.className = 'flex items-center mb-2';
+        div.innerHTML = `<input type="checkbox" id="${id}" data-idx="${i}" class="mr-2" /><label for="${id}">${t.name}</label>`;
+        selectList.appendChild(div);
+      });
+      selectModal.classList.remove('hidden');
+    }
+    selectCancelBtn.addEventListener('click', () => selectModal.classList.add('hidden'));
+
+    selectConfirmBtn.addEventListener('click', () => {
+      const checked = Array.from(selectList.querySelectorAll('input[type="checkbox"]:checked'))
+        .map(chk => parseInt(chk.dataset.idx));
+      if (!checked.length) return selectModal.classList.add('hidden');
+      if (selectAction === 'delete') {
+        // Remove selected tasks
+        tasks = tasks.filter((_, i) => !checked.includes(i));
+        saveTasks(); loadData();
+      } else if (selectAction === 'export') {
+        // Export each
+        checked.forEach(i => {
+          const t = tasks[i];
+          let content = `Tarea: ${t.name}\n\n`;
+          if (!t.records.length) content += 'Sin registros.';
+          else t.records.forEach(r => {
+            const date = new Date(r.timestamp);
+            content += `${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
+          });
+          const blob = new Blob([content], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `historial_${t.name.replace(/\s+/g,'_')}.txt`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+      }
+      selectModal.classList.add('hidden');
+    });
+
+    // Render task buttons
+    function renderTasks() {
+      tasksContainer.innerHTML = '';
+      tasks.forEach((task, idx) => {
+        const btn = document.createElement('button');
+        btn.innerHTML = `✅ ${task.name}`;
+        btn.className = 'w-full bg-white rounded-xl shadow p-4 text-left flex items-center justify-between hover:bg-gray-50';
+        btn.addEventListener('click', () => openModal(idx));
+        tasksContainer.appendChild(btn);
+      });
+    }
+
+    // Open photo modal
+    function openModal(idx) {
+      currentTaskIndex = idx;
+      modalTaskName.textContent = `Tarea: ${tasks[idx].name}`;
+      photoInput.value = '';
+      modal.classList.remove('hidden');
+    }
+    cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
+
+    // Confirm photo or simple record
+    confirmBtn.addEventListener('click', () => {
+      const file = photoInput.files[0];
+      const timestamp = new Date().toISOString();
+      const saveRecord = photoData => {
+        const recs = tasks[currentTaskIndex].records;
+        recs.push({ timestamp, photo: photoData });
+        // Keep last 15 entries
+        tasks[currentTaskIndex].records = recs.slice(-15);
+        saveTasks(); renderTasks(); renderHistory(); modal.classList.add('hidden');
+      };
+      if (file) {
+        const reader = new FileReader(); reader.onload = () => saveRecord(reader.result); reader.readAsDataURL(file);
+      } else saveRecord(null);
+    });
+
+    // Render history
+    function renderHistory() {
+      historyDiv.innerHTML = '';
+      tasks.forEach(task => {
+        const section = document.createElement('div');
+        section.className = 'bg-white rounded-xl shadow p-4';
+        const title = document.createElement('h3'); title.className = 'font-semibold mb-2'; title.textContent = task.name;
+        section.appendChild(title);
+        if (!task.records.length) {
+          const p = document.createElement('p'); p.className = 'text-gray-500'; p.textContent = 'No tiene registros.';
+          section.appendChild(p);
+        } else {
+          task.records.forEach(r => {
+            const div = document.createElement('div'); div.className = 'flex items-center mb-2';
+            if (r.photo) {
+              const img = document.createElement('img'); img.src = r.photo;
+              img.className = 'w-12 h-12 rounded-full mr-3 object-cover border'; div.appendChild(img);
+            }
+            const info = document.createElement('div');
+            const date = new Date(r.timestamp);
+            info.innerHTML = `<p class=\"text-sm\">${date.toLocaleDateString()} ${date.toLocaleTimeString()}</p>`;
+            div.appendChild(info); section.appendChild(div);
+          });
+        }
+        historyDiv.appendChild(section);
+      });
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
